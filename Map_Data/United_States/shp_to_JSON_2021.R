@@ -32,7 +32,7 @@ state.lookup <- fread("Base_Files/State_Codes.csv", colClasses=rep("character", 
 
 ### National State Map
 setwd(file_directory)
-system("mapshaper -i cb_2018_us_state_500k_CLEANED.shp -o US_National_State_Map_2021_1.topojson format=topojson -clean -snap")
+system("mapshaper -i cb_2018_us_state_500k_CLEANED.shp -o US_National_State_Map_2021_1.topojson format=topojson -clean -snap -filter-fields STATEFP,NAME")
 system("toposimplify -s 7e-7 -f US_National_State_Map_2021_1.topojson -o US_National_State_Map_2021.topojson")
 file.remove("US_National_State_Map_2021_1.topojson")
 file.rename("US_National_State_Map_2021.topojson", "../topoJSON/US_National_State_Map_2021.topojson")
@@ -40,7 +40,7 @@ setwd(current_directory)
 
 ### National District Map
 setwd(file_directory)
-system("mapshaper -i schooldistrict_sy2021_tl21_CLEANED.shp -o US_National_District_Map_2021_1.topojson format=topojson -clean -snap")
+system("mapshaper -i schooldistrict_sy2021_tl21_CLEANED.shp -o US_National_District_Map_2021_1.topojson format=topojson -clean -snap -filter-fields STATEFP,NAME")
 system("toposimplify -s 7e-7 -f US_National_District_Map_2021_1.topojson -o US_National_District_Map_2021_2.topojson")
 system("mapshaper -i US_National_District_Map_2021_2.topojson ../topoJSON/US_National_State_Map_2021.topojson combine-files -o US_National_District_Map_2021.topojson format=topojson")
 file.remove(c("US_National_District_Map_2021_1.topojson", "US_National_District_Map_2021_2.topojson"))
