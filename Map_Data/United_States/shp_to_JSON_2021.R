@@ -3,6 +3,8 @@
 ### Script to rename and convert 2021 shape files to both geoJSON and topoJSON
 ### All Shape files downloaded from
 ### https://nces.ed.gov/programs/edge/Geographic/DistrictBoundaries
+### toposimply installed via npm i topojson-simplify
+### mapshaper installed via npm i mapshaper
 ###
 ########################################################################################
 
@@ -26,22 +28,52 @@ state.lookup <- fread("Base_Files/State_Codes.csv", colClasses=rep("character", 
 #st_write(district_shape_file, "Map_Data/United_States/Base_Files/schooldistrict_sy2021_tl21_CLEANED.shp", driver="ESRI Shapefile")
 #st_write(state_shape_file, "Map_Data/United_States/Base_Files/cb_2018_us_state_500k_CLEANED.shp", driver="ESRI Shapefile")
 
-###################################################################
-### SHP to geoJSON
-###################################################################
+### STEP 1: Create district maps and outlines by state
+### Outlines are created to create clean state boundaries in national map
+setwd(file_directory)
+system("mapshaper schooldistrict_sy2021_tl21_CLEANED.shp -split STATEFP -o")
+state.ids <- data.table(STATEFP=state_shape_file$STATEFP, STATE_ABBREVIATION=state_shape_file$STUSPS, STATE_NAME=state_shape_file$NAME, key="STATEFP")
+
+for (i in state.ids$STATEFP) {
+	print(paste("Starting:", state.abbreviation <- state.ids[STATEFP==i]$STATE_ABBREVIATION))
+	system(paste0("mapshaper -i ", i, ".shp -filter-fields STATEFP,NAME -rename-fields State=STATEFP,District=NAME -o ", state.abbreviation, "_1.topojson format=topojson"))
+	system(paste0("toposimplify -P 0.05 -f ", state.abbreviation, "_1.topojson -o ", state.abbreviation, "_2.topojson"))
+	system(paste0("mapshaper -i ", state.abbreviation, "_2.topojson -snap -clean -o ", state.abbreviation, ".topojson format=topojson"))
+	system(paste0("mapshaper -i ", i, ".shp -dissolve -snap -clean -o ", state.abbreviation, "_1_OUTLINE.topojson format=topojson"))
+	system(paste0("toposimplify -P 0.05 -f ", state.abbreviation, "_1_OUTLINE.topojson -o ", state.abbreviation, "_2_OUTLINE.topojson"))
+	system(paste0("mapshaper -i ", state.abbreviation, "_2_OUTLINE.topojson -snap -clean -o ", state.abbreviation, "_OUTLINE.topojson format=topojson"))
+	file.remove(c(paste0(state.abbreviation, "_1.topojson"), paste0(state.abbreviation, "_1_OUTLINE.topojson"), paste0(state.abbreviation, "_2.topojson"), paste0(state.abbreviation, "_2_OUTLINE.topojson"), list.files(pattern=paste0(i, "\\."))))
+	file.rename(paste0(state.abbreviation, ".topojson"), paste0("../topoJSON/", state.abbreviation, ".topojson"))
+	file.rename(paste0(state.abbreviation, "_OUTLINE.topojson"), paste0("../topoJSON/", state.abbreviation, "_OUTLINE.topojson"))
+}
+setwd(current_directory)
+
+### STEP 2: Stitch together state maps to create a national map 
+setwd("topoJSON")
+system(paste0("mapshaper -i ", paste(state.ids$STATE_ABBREVIATION, "topojson", sep=".", collapse=" "), " ", paste(state.ids$STATE_ABBREVIATION, "topojson", sep="_OUTLINE.", collapse=" "), " combine-files -o US_National_Districts_Map_2021.topojson format=topojson"))
+system("mapshaper -i US_National_Districts_Map_2021_1.topojson -snap -clean -o US_National_Districts_Map_2021.topojson")
+setwd(current_directory)
+
+
+
+
+
+
 
 ### National State Map
 setwd(file_directory)
-system("mapshaper -i cb_2018_us_state_500k_CLEANED.shp -o US_National_State_Map_2021_1.topojson format=topojson -clean -snap -filter-fields STATEFP,NAME")
-system("toposimplify -s 7e-7 -f US_National_State_Map_2021_1.topojson -o US_National_State_Map_2021.topojson")
+system("mapshaper -i cb_2018_us_state_500k_CLEANED.shp -filter-fields NAME -rename-fields State=NAME -clean -snap -o US_National_State_Map_2021_1.topojson format=topojson")
+system("toposimplify -P 0.05 -f US_National_State_Map_2021_1.topojson -o US_National_State_Map_2021.topojson")
+#system("toposimplify -s 7e-7 -f US_National_State_Map_2021_1.topojson -o US_National_State_Map_2021.topojson")
 file.remove("US_National_State_Map_2021_1.topojson")
 file.rename("US_National_State_Map_2021.topojson", "../topoJSON/US_National_State_Map_2021.topojson")
 setwd(current_directory)
 
 ### National District Map
 setwd(file_directory)
-system("mapshaper -i schooldistrict_sy2021_tl21_CLEANED.shp -o US_National_District_Map_2021_1.topojson format=topojson -clean -snap -filter-fields STATEFP,NAME")
-system("toposimplify -s 7e-7 -f US_National_District_Map_2021_1.topojson -o US_National_District_Map_2021_2.topojson")
+system("mapshaper -i schooldistrict_sy2021_tl21_CLEANED.shp  -filter-fields NAME -rename-fields District=NAME  -clean -snap -o US_National_District_Map_2021_1.topojson format=topojson")
+#system("toposimplify -s 7e-7 -f US_National_District_Map_2021_1.topojson -o US_National_District_Map_2021_2.topojson")
+system("toposimplify -P 0.05 -f US_National_District_Map_2021_1.topojson -o US_National_District_Map_2021_2.topojson")
 system("mapshaper -i US_National_District_Map_2021_2.topojson ../topoJSON/US_National_State_Map_2021.topojson combine-files -o US_National_District_Map_2021.topojson format=topojson")
 file.remove(c("US_National_District_Map_2021_1.topojson", "US_National_District_Map_2021_2.topojson"))
 file.rename("US_National_District_Map_2021.topojson", "../topoJSON/US_National_District_Map_2021.topojson")
@@ -53,6 +85,8 @@ state.ids <- data.table(STATEFP=state_shape_file$STATEFP, STATE_ABBREVIATION=sta
 
 for (i in state.ids$STATEFP) {
 	print(paste("Starting:", state.abbreviation <- state.ids[STATEFP==i]$STATE_ABBREVIATION))
+	system(paste0("mapshaper -i ", i, ".shp -o ", state.abbreviation, "_1.topojson format=topojson -clean -snap"))
+	system(paste0("mapshaper -i ", i, ".shp -dissolve -clean -snap -o ", state.abbreviation, "_1_OUTLINE.topojson format=topojson"))
 	system(paste0("mapshaper -i ", i, ".shp -o ", state.abbreviation, "_1.topojson format=topojson -clean -snap"))
 	system(paste0("toposimplify -P 0.05 -f ", state.abbreviation, "_1.topojson -o ", state.abbreviation, ".topojson"))
 	file.remove(c(paste0(state.abbreviation, "_1.topojson"), list.files(pattern=paste0(i, "\\."))))
@@ -86,14 +120,3 @@ file.rename("TEMP_NO_PROPERTIES.json", "USA_Districts_NO_PROPERTIES.topojson")
 
 system("mapshaper -i USA_Districts.topojson USA_States_NO_PROPERTIES.topojson combine-files -o USA_Districts_States.topojson format=topojson")
 system("mapshaper -i USA_Districts_NO_PROPERTIES.topojson USA_States_NO_PROPERTIES.topojson combine-files -o USA_Districts_States_NO_PROPERTIES.topojson format=topojson")
-
-
-### Move topojson files
-
-dir.create(paste("../Topojson_", current.year, sep=""), showWarnings=FALSE)
-system(paste("mv *.topojson", paste("../Topojson_", current.year, sep="")))
-system("rm *.*")
-
-### Reset working directory
-
-setwd("..")
