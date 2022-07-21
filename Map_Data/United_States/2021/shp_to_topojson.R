@@ -5,6 +5,7 @@
 ### https://nces.ed.gov/programs/edge/Geographic/DistrictBoundaries
 ### toposimply installed via npm i topojson-simplify
 ### mapshaper installed via npm i mapshaper
+### UNSDLEA to state district number lookup from https://nces.ed.gov/ccd/Data/zip/ccd_lea_029_2021_w_1a_080621.zip
 ###
 ### Two types of files are produced
 ### 1. Individual State/Territory topoJSON files 
@@ -19,12 +20,21 @@ require(data.table)
 
 ### Load Data
 state.lookup <- fread("Base_Files/State_Codes.csv", colClasses=rep("character", 3))
+district.number.lookup <- fread("Base_Files/ccd_lea_029_2021_w_1a_080621.csv")
+
+### Clean-up district.number.lookup
+district.number.lookup <- district.number.lookup[,c("ST_LEAID", "LEAID"), with=FALSE]
+setnames(district.number.lookup, c("ST_LEAID", "LEAID"), c("DISNUM", "GEOID"))
+district.number.lookup[,GEOID:=strtail(paste0("0", GEOID), 7)]
+district.number.lookup <- district.number.lookup[!duplicated(district.number.lookup, by="GEOID")]
 
 ### Read, fix, and write .shp files 
 US_SchoolDistrict_2021 <- read_sf("Base_Files/schooldistrict_sy2021_tl21.shp")
 US_SchoolDistrict_2021 <- st_make_valid(US_SchoolDistrict_2021)
 state.ids <- state.lookup[STATEFP %in% unique(US_SchoolDistrict_2021$STATEFP)] 
 US_SchoolDistrict_2021 <- merge(US_SchoolDistrict_2021, state.ids)
+US_SchoolDistrict_2021 <- merge(US_SchoolDistrict_2021, district.number.lookup, all.x=TRUE)
+#US_SchoolDistrict_2021$DISNUM[is.na(US_SchoolDistrict_2021$DISNUM)] <- US_SchoolDistrict_2021$UNSDLEA[is.na(US_SchoolDistrict_2021$DISNUM)] 
 st_write(US_SchoolDistrict_2021, "Base_Files/US_SchoolDistrict_2021.shp", append=FALSE)
 save(state.ids, file="Base_Files/state.ids.Rdata")
 
@@ -37,15 +47,15 @@ system("mapshaper US_SchoolDistrict_2021.shp -split STATEFP -o")
 
 for (i in state.ids$STATEFP) {
 	print(paste("Starting:", state.abbreviation <- state.ids[STATEFP==i]$STATE_ABBREVIATION))
-	system(paste0("mapshaper -i ", i, ".shp -filter-fields STATE,NAME -rename-fields State=STATE,District=NAME -o ", state.abbreviation, "_1.topojson format=topojson"))
+	system(paste0("mapshaper -i ", i, ".shp -filter-fields DISNUM,NAME -rename-fields District_Number=DISNUM,District_Name=NAME -o ", state.abbreviation, "_1.topojson format=topojson"))
 	system(paste0("toposimplify -P 0.05 -f ", state.abbreviation, "_1.topojson -o ", state.abbreviation, "_2.topojson"))
 	system(paste0("mapshaper -i ", state.abbreviation, "_2.topojson -snap -clean -o ", state.abbreviation, ".topojson format=topojson"))
 	file.remove(c(paste0(state.abbreviation, c("_1.topojson", "_2.topojson")), paste0(i, c(".dbf", ".prj", ".shp", ".shx"))))
 	file.rename(paste0(state.abbreviation, ".topojson"), paste0("../topoJSON/", state.abbreviation, ".topojson"))
 # 	if (state.abbreviation %in% c("HI", "AS", "GU", "MP", "PR", "VI", "DC")) {
-# 		system(paste0("mapshaper -i ", i, ".shp -filter-fields STATE,NAME -rename-fields State=STATE,District=NAME -o ", state.abbreviation, "_3.topojson format=topojson"))
+# 		system(paste0("mapshaper -i ", i, ".shp -filter-fields DISNUM,NAME -rename-fields District_Number=DISNUM,District_Name=NAME -o ", state.abbreviation, "_3.topojson format=topojson"))
 # 	} else {
-# 		system(paste0("mapshaper -i ", i, ".shp -filter-fields STATE,NAME -rename-fields State=STATE,District=NAME -innerlines -o ", state.abbreviation, "_3.topojson format=topojson"))
+# 		system(paste0("mapshaper -i ", i, ".shp -filter-fields DISNUM,NAME -rename-fields District_Number=DISNUM,District_Name=NAME -innerlines -o ", state.abbreviation, "_3.topojson format=topojson"))
 # 	}
 # 	system(paste0("toposimplify -P 0.05 -f ", state.abbreviation, "_3.topojson -o ", state.abbreviation, "_4.topojson"))
 # 	system(paste0("mapshaper -i ", state.abbreviation, "_4.topojson -snap -clean -o ", state.abbreviation, "_INNERLINES.topojson format=topojson"))
@@ -64,7 +74,7 @@ file.rename("US_State_Map.topojson", "../topoJSON/US_State_Map.topojson")
 #########################################################
 ### STEP 3: Create National District file (version 1)
 #########################################################
-system("mapshaper -i US_SchoolDistrict_2021.shp -filter-fields STATE,NAME -rename-fields State=STATE,District=NAME -o US_National_School_Districts_Map_2021_V1_1.topojson format=topojson")
+system("mapshaper -i US_SchoolDistrict_2021.shp -filter-fields DISNUM,NAME -rename-fields District_Number=DISNUM,District_Name=NAME -o US_National_School_Districts_Map_2021_V1_1.topojson format=topojson")
 system("toposimplify -P 0.025 -f US_National_School_Districts_Map_2021_V1_1.topojson -o US_National_School_Districts_Map_2021_V1_2.topojson")
 system("mapshaper -i US_National_School_Districts_Map_2021_V1_2.topojson -snap -clean -o US.topojson format=topojson")
 file.remove(c("US_National_School_Districts_Map_2021_V1_1.topojson", "US_National_School_Districts_Map_2021_V1_2.topojson"))
