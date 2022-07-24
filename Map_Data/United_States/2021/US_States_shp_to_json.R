@@ -58,13 +58,14 @@ US_States_v1 <- readOGR(dsn="Base_Files/cb_2018_us_state_5m.shp")
 names(US_States_v1)[5:6] <- c("ST_ABBR", "STATE")
 US_States_v2 <- US_States_v1[US_States_v1$ST_ABBR %in% state.abbs.to.retain,]
 US_States_v3 <- spTransform(US_States_v2, CRS("+init=epsg:9311"))
-US_States_FINAL <- fixup(US_States_v3, c(-35,2.0,-2600000,-2400000), c(-35,1.5,-700000,-2300000), c(20, 0.8, 2200000, -2200000), c(20, 0.8, 2700000, -2200000))
-writeOGR(US_States_FINAL, "Base_Files", "US_States_FINAL", driver="ESRI Shapefile")
+US_States_TRANSFORMED <- fixup(US_States_v3, c(-35,2.0,-2600000,-2400000), c(-35,1.5,-700000,-2300000), c(20, 0.8, 2200000, -2200000), c(20, 0.8, 2700000, -2200000))
+writeOGR(US_States_TRANSFORMED, "Base_Files", "US_States_TRANSFORMED", driver="ESRI Shapefile")
 
 ####################################################
 ### STEP 2: Convert .shp file to topojson file
 ####################################################
-system("mapshaper -i US_States_FINAL.shp -filter-fields ST_ABBR,STATE -rename-fields State=STATE,Abbreviation=ST_ABBR -o US_State_Map_1.topojson format=topojson")
+setwd("Base_Files")
+system("mapshaper -i US_States_TRANSFORMED.shp -filter-fields ST_ABBR,STATE -rename-fields State=STATE,Abbreviation=ST_ABBR -o US_State_Map_1.topojson format=topojson")
 system(paste0("toposimplify -P 0.05 -f US_State_Map_1.topojson -o US_State_Map.topojson"))
 file.remove("US_State_Map_1.topojson")
 file.rename("US_State_Map.topojson", "../topoJSON/US_State_Map.topojson")
